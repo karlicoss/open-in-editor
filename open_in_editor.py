@@ -1,23 +1,28 @@
 #!/usr/bin/env python3
 '''
-This scripts allows triggering opening emacs from a link on a webpage/browser extension via MIME.
-Handles links like:
+This scripts allows opening your text editor from a link on a webpage/within a browser extension via MIME.
+See a short [[https://karlicoss.github.io/promnesia-demos/jump_to_editor.webm][demo]].
 
-   editor:///path/tofile:123
+It handles URIs like:
 
-See test_parse_uri for more examples.
+:    editor:///path/to/file:123
+:    editor:///path/to/file?line=456
+
+See =test_parse_uri= for more examples.
 
 To install (register the MIME handler), run
 
-   python3 open-in-editor --editor emacs --install
+:   python3 open_in_editor.py --install --editor emacs
 
-See --help for the list of available editors. If you want to add other editors, the code should be easy to follow.
+See =--help= for the list of available editors. If you want to add other editors, the code should be easy to follow.
 
 You can check that it works with
 
-   xdg-open 'editor:///path/to/some/file'
+:   xdg-open 'editor:///path/to/some/file'
 
-I haven't found any existing/mature scripts for this, please let me know if you know of any! I'd be happy to support one less script.
+I haven't found any existing/mature scripts for this, *please let me know if you know of any*! I'd be quite happy to support one less script :)
+
+The script was tested on *Linux only*! I'd be happy if someone contributes adjustments for OSX.
 '''
 # TODO make it editor-agnostic? although supporting line numbers will be trickier
 
@@ -111,7 +116,7 @@ Terminal=false
 MimeType=x-scheme-handler/{PROTOCOL_NAME};
 """.strip()
     with tempfile.TemporaryDirectory() as td:
-        pp = Path(td) / 'open-in-editor.desktop'
+        pp = Path(td) / 'open_in_editor.desktop'
         pp.write_text(CONTENT)
         check_call(['desktop-file-validate', str(pp)])
         dfile = Path('~/.local/share/applications').expanduser()

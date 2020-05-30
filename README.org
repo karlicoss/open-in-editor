@@ -1,0 +1,57 @@
+#+begin_src python :exports results :results output drawer
+import open_in_editor
+print(open_in_editor.__doc__)
+#+end_src
+
+#+RESULTS:
+:results:
+
+This scripts allows opening your text editor from a link on a webpage/within a browser extension via MIME.
+See a short [[https://karlicoss.github.io/promnesia-demos/jump_to_editor.webm][demo]].
+
+It handles URIs like:
+
+:    editor:///path/to/file:123
+:    editor:///path/to/file?line=456
+
+See =test_parse_uri= for more examples.
+
+To install (register the MIME handler), run
+
+:   python3 open_in_editor.py --install --editor emacs
+
+See =--help= for the list of available editors. If you want to add other editors, the code should be easy to follow.
+
+You can check that it works with
+
+:   xdg-open 'editor:///path/to/some/file'
+
+I haven't found any existing/mature scripts for this, *please let me know if you know of any*! I'd be quite happy to support one less script :)
+
+The script was tested on *Linux only*! I'd be happy if someone contributes adjustments for OSX.
+
+:end:
+
+* Usage
+
+#+begin_src bash :exports results :results output verbatim
+./open_in_editor.py --help
+#+end_src
+
+#+RESULTS:
+#+begin_example
+usage: open_in_editor.py [-h] [--editor {emacs,vim,gvim,default}] [--install]
+                         [--run-tests]
+                         [uri]
+
+positional arguments:
+  uri                   URI to open + optional line number
+
+optional arguments:
+  -h, --help            show this help message and exit
+  --editor {emacs,vim,gvim,default}
+                        Editor to use. 'default' means using your default GUI
+                        editor (discovered with open/xdg-open)
+  --install             Pass to install (i.g. register MIME in your system)
+  --run-tests           Pass to run unit tests
+#+end_example
