@@ -25,7 +25,6 @@ I haven't found any existing/mature scripts for this, please let me know if you 
 PROTOCOL_NAME = 'editor'
 
 
-# TODO FIXME add a test for : in filename
 def test_parse_uri():
     assert parse_uri('editor:///path/to/file') == (
         '/path/to/file',
@@ -42,10 +41,21 @@ def test_parse_uri():
         None,
     )
 
-    # TODO FIXME not sure about this..
-    assert parse_uri('editor:///path/to/file/and/line:10') == (
-        '/path/to/file/and/line',
+    # TODO not sure about whether this or lien= thing is preferrable
+    assert parse_uri('editor:///path/to/file:10') == (
+        '/path/to/file',
         10,
+    )
+
+    # todo not sure about this. I guess it's a more 'proper' way? non ambiguous and supports columns and other stuff potentially
+    assert parse_uri('editor:///path/to/file?line=10') == (
+        '/path/to/file',
+        10,
+    )
+
+    assert parse_uri('editor:///path/to/file:oops/and:more') == (
+        '/path/to/file:oops/and:more',
+        None,
     )
 
     import pytest # type: ignore
@@ -76,7 +86,7 @@ import sys
 import subprocess
 from subprocess import check_call, run
 import tempfile
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse, parse_qsl
 
 
 
@@ -119,27 +129,30 @@ from typing import Tuple, Optional, List
 Line = int
 File = str
 def parse_uri(uri: str) -> Tuple[File, Optional[Line]]:
-    proto = PROTOCOL_NAME + '://'
-    if not uri.startswith(proto):
+    pr = urlparse(uri)
+    if pr.scheme != PROTOCOL_NAME:
         error(f"Unexpected protocol {uri}")
-        # not sure if a good idea to keep trying?
-
-    uri = uri[len(proto):]
-    spl = uri.split(':')
+        # not sure if a good idea to keep trying nevertheless?
+    path = unquote(pr.path)
 
     linenum: Optional[int] = None
-    if len(spl) == 1:
-        pass # no lnum specified
-    elif len(spl) == 2:
-        uri = spl[0]
-        # TODO could use that for column number? maybe an overkill though..
-        # https://www.gnu.org/software/emacs/manual/html_node/emacs/emacsclient-Options.html
-        linenum = int(spl[1])
+
+    line_s = dict(parse_qsl(pr.query)).get('line', None)
+    if line_s is not None:
+        linenum = int(line_s)
     else:
-        # TODO what if it actually has colons?
-        error(f"Extra colons in URI {uri}")
-    uri = unquote(uri)
-    return (uri, linenum)
+        spl = path.rsplit(':', maxsplit=1)
+
+        # meh. not sure about this
+        if len(spl) == 2:
+            try:
+                linenum = int(spl[1])
+            except ValueError:
+                # eh. presumably just a colon in filename
+                pass
+            else:
+                path = spl[0]
+    return (path, linenum)
 
 
 
@@ -227,6 +240,8 @@ def launch_in_terminal(cmd: List[str]):
     ])
 
 
+# TODO could use that for column number? maybe an overkill though.. and most extractors won'tsupport it anyway
+# https://www.gnu.org/software/emacs/manual/html_node/emacs/emacsclient-Options.html
 def main():
     p = argparse.ArgumentParser()
     # TODO allow passing a binary?
