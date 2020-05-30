@@ -9,42 +9,41 @@ See test_parse_uri for more examples.
 
 To install (register the MIME handler), run
 
-   python3 mimemacs --editor emacs --install
+   python3 open-in-editor --editor emacs --install
 
-You can use emacs/gvim as editors at the moment. If you want to add other editors, the code should be easy to follow.
+See --help for the list of available editors. If you want to add other editors, the code should be easy to follow.
 
 You can check that it works with
 
-   xdg-open 'emacs:/path/to/some/file'
+   xdg-open 'editor:///path/to/some/file'
 
-
-I haven't found any existing mechanisms for this, please let me know if you know of any!
-
+I haven't found any existing/mature scripts for this, please let me know if you know of any! I'd be happy to support one less script.
 '''
 # TODO make it editor-agnostic? although supporting line numbers will be trickier
 
 
-# TODO not sure if it should be emacs:// or editor:?
-PROTOCOL = "emacs:"
+PROTOCOL_NAME = 'editor'
 
 
+# TODO FIXME add a test for : in filename
 def test_parse_uri():
-    assert parse_uri('emacs:/path/to/file') == (
+    assert parse_uri('editor:///path/to/file') == (
         '/path/to/file',
         None,
     )
 
-    assert parse_uri('emacs:/path/with spaces') == (
+    assert parse_uri('editor:///path/with spaces') == (
         '/path/with spaces',
         None,
     )
 
-    assert parse_uri('emacs:/path/url%20encoded') == (
+    assert parse_uri('editor:///path/url%20encoded') == (
         '/path/url encoded',
         None,
     )
 
-    assert parse_uri('emacs:/path/to/file/and/line:10') == (
+    # TODO FIXME not sure about this..
+    assert parse_uri('editor:///path/to/file/and/line:10') == (
         '/path/to/file/and/line',
         10,
     )
@@ -55,6 +54,7 @@ def test_parse_uri():
 
 
 def test_open_editor():
+    import time
     from tempfile import TemporaryDirectory
     with TemporaryDirectory() as td:
         p = Path(td) / 'some file.org'
@@ -64,7 +64,10 @@ line 2
 line 3 ---- THIS LINE SHOULD BE IN FOCUS!
 line 4
 '''.strip())
-        open_editor(f'emacs:{p}:3', editor='emacs')
+        # todo eh, warns about swapfile
+        for editor in EDITORS.keys():
+            open_editor(f'editor://{p}:3', editor=editor)
+        input("Press enter when ready")
 
 
 import argparse
@@ -91,33 +94,37 @@ def install(editor: str) -> None:
     this_script = str(Path(__file__).absolute())
     CONTENT = f"""
 [Desktop Entry]
-Name=Emacs Mime handler
+Name=Open file in your text editor
 Exec=python3 {this_script} --editor {editor} %u
-Icon=emacs-icon
 Type=Application
 Terminal=false
-MimeType=x-scheme-handler/emacs;
+MimeType=x-scheme-handler/{PROTOCOL_NAME};
 """.strip()
     with tempfile.TemporaryDirectory() as td:
-        pp = Path(td) / 'mimemacs.desktop'
+        pp = Path(td) / 'open-in-editor.desktop'
         pp.write_text(CONTENT)
         check_call(['desktop-file-validate', str(pp)])
+        dfile = Path('~/.local/share/applications').expanduser()
         check_call([
             'desktop-file-install',
-            '--dir', str(Path('~/.local/share/applications').expanduser()),
+            '--dir', dfile,
             '--rebuild-mime-info-cache',
             str(pp),
         ])
+        print(f"Installed {pp.name} file to {dfile}", file=sys.stderr)
+        print(f"""You might want to check if it works with "xdg-open '{PROTOCOL_NAME}:///path/to/some/file'" """, file=sys.stderr)
 
 
 from typing import Tuple, Optional, List
 Line = int
 File = str
 def parse_uri(uri: str) -> Tuple[File, Optional[Line]]:
-    if not uri.startswith(PROTOCOL):
+    proto = PROTOCOL_NAME + '://'
+    if not uri.startswith(proto):
         error(f"Unexpected protocol {uri}")
+        # not sure if a good idea to keep trying?
 
-    uri = uri[len(PROTOCOL):]
+    uri = uri[len(proto):]
     spl = uri.split(':')
 
     linenum: Optional[int] = None
@@ -135,45 +142,51 @@ def parse_uri(uri: str) -> Tuple[File, Optional[Line]]:
     return (uri, linenum)
 
 
+
 def open_editor(uri: str, editor: str) -> None:
     uri, line = parse_uri(uri)
 
-    if editor == 'emacs':
-        open_emacs(uri, line)
-    elif editor == 'gvim':
-        open_vim(uri, line)
+    # TODO seems that sublime and atom support :line:column syntax? not sure how to pass it through xdg-open though
+    opener = EDITORS.get(editor, None)
+
+    if opener is None:
+        notify(f'Unexpected editor {editor}! Falling back to vim')
+        opener = open_vim
+    opener(uri, line)
+
+
+def with_line(uri: File, line: Optional[Line]) -> List[str]:
+    return [uri] if line is None else [f'+{line}', uri]
+
+
+def open_default(uri: File, line:Optional[Line]) -> None:
+    import shutil
+    for open_cmd in ['xdg-open', 'open']:
+        if shutil.which(open_cmd):
+            # sadly no generic way to handle line for editors?
+            check_call([open_cmd, uri])
+            break
     else:
-        notify(f'Unexpected editor {editor}')
-        import shutil
-        for open_cmd in ['xdg-open', 'open']:
-            if shutil.which(open_cmd):
-                # sadly no generic way to handle line
-                check_call([open_cmd, uri])
-                break
-        else:
-            error('No xdg-open/open found!')
+        error("No xdg-open/open found, can't figure out default editor. Fallback to vim!")
+        open_vim(uri=uri, line=line)
 
 
-def open_vim(uri: File, line: Optional[Line]) -> None:
-    args = [uri] if line is None else [f'+{line}', uri]
+def open_gvim(uri: File, line: Optional[Line]) -> None:
+    args = with_line(uri, line)
     cmd = [
         'gvim',
         *args,
     ]
-    check_call(cmd)
-    return
+    check_call(['gvim', *args])
 
-    ## alternatively, if you prefer a terminal vim
-    cmd = [
-        'vim',
-        *args,
-    ]
-    launch_in_terminal(cmd)
 
+def open_vim(uri: File, line: Optional[Line]) -> None:
+    args = with_line(uri, line)
+    launch_in_terminal(['vim', *args])
 
 
 def open_emacs(uri: File, line: Optional[Line]) -> None:
-    args = [uri] if line is None else [f'+{line}', uri]
+    args = with_line(uri, line)
     cmd = [
         'emacsclient',
         '--create-frame',
@@ -195,6 +208,15 @@ def open_emacs(uri: File, line: Optional[Line]) -> None:
     launch_in_terminal(cmd)
     ###
 
+
+EDITORS = {
+    'emacs'  : open_emacs,
+    'vim'    : open_vim,
+    'gvim'   : open_gvim,
+    'default': open_default,
+}
+
+
 def launch_in_terminal(cmd: List[str]):
     import shlex
     check_call([
@@ -204,14 +226,14 @@ def launch_in_terminal(cmd: List[str]):
         ' '.join(map(shlex.quote, cmd)),
     ])
 
-    
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--editor', type=str, default='emacs', help='Editor to use (supported so far: emacs, gvim)')
-    p.add_argument('--install', action='store_true', help='Pass to register MIME in your system')
-    p.add_argument('uri', nargs='?')
-    p.add_argument('--run-tests', action='store_true', help='Run unit tests')
+    # TODO allow passing a binary?
+    p.add_argument('--editor', type=str, default='vim', choices=EDITORS.keys(), help="Editor to use. 'default' means using your default GUI editor (discovered with open/xdg-open)")
+    p.add_argument('--install', action='store_true', help='Pass to install (i.g. register MIME in your system)')
+    p.add_argument('uri', nargs='?', help='URI to open + optional line number')
+    p.add_argument('--run-tests', action='store_true', help='Pass to run unit tests')
     args = p.parse_args()
     if args.run_tests:
         # fuck, pytest can't run against a file without .py extension?
