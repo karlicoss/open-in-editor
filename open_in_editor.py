@@ -197,6 +197,8 @@ def open_gvim(uri: File, line: Optional[Line]) -> None:
     ]
     check_call(['gvim', *args])
 
+def open_kwrite(uri: File, line: Optional[Line]) -> None:
+    check_call(['kwrite'] + (['--line', str(line)] if line else []) + [uri])
 
 def open_vim(uri: File, line: Optional[Line]) -> None:
     args = with_line(uri, line)
@@ -208,7 +210,7 @@ def open_emacs(uri: File, line: Optional[Line]) -> None:
     cmd = [
         'emacsclient',
         '--create-frame',
-        # trick to run daemon if it isn't https://www.gnu.org/software/emacs/manual/html_node/emacs/emacsclient-Options.html
+        # trick to run daemon if it isn't https://www.gnu.org/software/emacs/manual/html_node/emacs/emacsclient-Options.html # doesn't work in 27.1?
         '--alternate-editor=""',
         *args,
     ]
@@ -232,6 +234,7 @@ EDITORS = {
     'vim'    : open_vim,
     'gvim'   : open_gvim,
     'default': open_default,
+	'kwrite' : open_kwrite,
 }
 
 
